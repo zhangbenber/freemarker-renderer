@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>Freemarker Renderer</title>
+	<style>
+		* {
+			border: none;
+			padding: 0;
+			margin: 0;
+			box-sizing: border-box;
+		}
+		*:focus {
+			outline: none;
+		}
+		html, body {
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+		}
+		body {
+			display: flex;
+		}
+		form {
+			flex: none;
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			width: 400px;
+			border-right: 1px solid #ccc;
+			background: #fafafa;
+		}
+		form * {
+			display: block;
+			flex: none;
+		}
+		form label {
+			padding: 15px 10px 0;
+			border-top: 1px solid #eaeaea;
+			color: #aaa;
+			font-weight: lighter;
+			text-transform: uppercase;
+			font-size: 15px;
+		}
+		form input {
+			margin: 0 5px 10px;
+			padding: 5px;
+			font-family: Consolas;
+			color: #333;
+			font-size: 14px;
+			background: none;
+		}
+		form textarea {
+			flex: auto;
+			resize: none;
+			padding: 5px 10px 10px;
+			font-family: Consolas;
+			color: #333;
+			font-size: 14px;
+			background: none;
+		}
+		.submit {
+			height: 100px;
+			border: 1px solid #357aac;
+			background: #50a9e0;
+			margin-right: -1px;
+			color: #fff;
+			text-shadow: 0 1px 1px rgba(0,0,0,.5);
+			font-size: 30px;
+			cursor: pointer;
+			transition: all .15s;
+			font-weight: bold;
+		}
+		.submit:hover {
+			text-shadow: 0 3px 5px rgba(0,0,0,.5);
+		}
+		.submit:active {
+			color: #eee;
+			text-shadow: 0 1px 1px rgba(0,0,0,.5);
+			background: #459acc;
+		}
+		.result {
+			flex: auto;
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+		}
+		.switch {
+			flex: none;
+			background: #fafafa;
+			border-bottom: 1px solid #ccc;
+			color: #555;
+			font-size: 14px;
+			list-style: none;
+			position: relative;
+			z-index: 1;
+			height: 37px;
+			padding-top: 2px;
+		}
+		.switch li {
+			display: inline-block;
+			line-height: 36px;
+			padding: 0 10px;
+			cursor: pointer;
+			border: solid transparent;
+			border-width: 0 1px;
+			color: #555;
+			font-weight: lighter;
+			text-transform: uppercase;
+			font-size: 13px;
+		}
+		.result.prev .switch .s1, .result.raw .switch .s2 {
+			background: #fff;
+			border-color: #eee;
+			box-shadow: 0 -2px #50a9e0;
+		}
+		.frame {
+			flex: auto;
+			border: 1px solid #eee;
+			position: relative;
+		}
+		.frame .f {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+		}
+		.frame pre {
+			font-size: 14px;
+			padding: 5px;
+			overflow-y: auto;
+			color: #333;
+		}
+		.result.prev .frame .f2, .result.raw .frame .f1 {
+			display: none;
+		}
+		.info {
+			flex: none;
+			height: 100px;
+			overflow-y: auto;
+			background: #fafafa;
+			border-top: 1px solid #ccc;
+			padding: 8px 10px 10px;
+			color: #555;
+			font-size: 14px;
+		}
+		.info p {
+			font-size: 15px;
+			color: #aaa;
+			font-weight: lighter;
+			text-transform: uppercase;
+			padding-bottom: 6px;
+		}
+		pre {
+			white-space: pre-wrap;
+		}
+		pre.error {
+			color: #c53;
+		}
+		::-webkit-input-placeholder {
+			color: #ccc;
+		}
+	</style>
+</head>
+<script src="zepto.min.js"></script>
+<body>
+	<form action="/render" method="post" class="J_form">
+		<label for="root">View Root</label>
+		<input type="text" name="root" id="root" placeholder="> Local path of your templates root folder" spellcheck="false" />
+		<label for="file">Filename</label>
+		<input type="text" name="file" id="file" placeholder="> Your FTL file to render relative to root" spellcheck="false" />
+		<label for="data">Data JSON</label>
+		<textarea name="data" id="data" placeholder="> Data to inject into the template in JSON" spellcheck="false"></textarea>
+		<button class="submit J_submit">Render!</button>
+	</form>
+	<div class="result prev J_result">
+		<ul class="switch">
+			<li class="J_switch s1" data-index="1">HTML Preview</li>
+			<li class="J_switch s2" data-index="2">Raw</li>
+		</ul>
+		<div class="frame">
+			<iframe class="J_frame f f1"></iframe>
+			<pre class="J_raw f f2"></pre>
+		</div>
+		<div class="info">
+			<p>Output</p>
+			<pre class="J_info"></pre>
+		</div>
+	</div>
+	<script>
+		['root', 'file', 'data'].forEach(p => $('#' + p).val(localStorage.getItem(p) || ''))
+		let tip = t => `<h1 style="padding: 50px 0; color: #aaa; font-size: 20px; text-align: center; font-weight: lighter;">${t}</h1>`
+		$('.J_submit').click(e => {
+			e.preventDefault()
+			let params = new FormData($('.J_form')[0])
+			$('.J_frame')[0].contentDocument.body.innerHTML = tip('Rendering...')
+			$('.J_raw').text('Rendering...')
+			$('.J_info').text('Pending...').removeClass('error');
+			['root', 'file', 'data'].forEach(p => localStorage.setItem(p, params.get(p)))
+			$.ajax({
+				type: 'post',
+				url: 'render',
+				data: params,
+                processData: false,
+				contentType: false,
+				success: data => {
+					let html = (data.html && (data.html !== 'undefined')) ? data.html : ''
+					$('.J_frame')[0].contentDocument.body.innerHTML = html
+					$('.J_raw').text(html)
+					$('.J_info').text(data.output || data.err)
+					if (data.err) {
+						$('.J_info').addClass('error')
+						$('.J_frame')[0].contentDocument.body.innerHTML = tip('Opps! There\'s an error...')
+						$('.J_raw').text('Opps! There\'s an error...')
+					}
+				},
+				error: data => {
+					$('.J_info').text('Error!').addClass('error')
+					$('.J_frame')[0].contentDocument.body.innerHTML = tip('It seems something goes wrong...')
+					$('.J_raw').text('It seems something goes wrong...')
+				}
+			})
+		})
+		$('.J_switch').click(function () {
+			let arr = ['prev', 'raw']
+			let index = $(this).data('index')
+			let chosen = arr[index - 1]
+			let unchosen = arr[2 - index]
+			$('.J_result').removeClass(unchosen).addClass(chosen)
+		})
+		$('.J_frame')[0].contentDocument.body.innerHTML = tip('Render FTL files right into your browser.')
+	</script>
+</body>
+</html>
